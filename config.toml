@@ -1,0 +1,37 @@
+[cli]
+installer = "internal"
+
+[models]
+default = "Steve"
+default_reasoning_effort = "high"
+
+[model.Steve]
+model = "grok-4.5"
+base_url = "https://YOUR_API_BASE_URL/v1"
+name = "grok-4.5"
+api_key = "YOUR_API_KEY"
+context_window = 500000
+supports_reasoning_effort = true
+reasoning_efforts = [
+    "low",
+    "medium",
+    "high",
+]
+
+[features]
+telemetry = false
+feedback = false
+
+[telemetry]
+trace_upload = false
+mixpanel_enabled = false
+
+[harness]
+disable_codebase_upload = true
+
+[ui]
+max_thoughts_width = 120
+fork_secondary_model = "grok-build"
+yolo = false
+compact_mode = false
+permission_mode = "always-approve"
