@@ -24,28 +24,74 @@ GrokBuild/
 
 ## 前置条件
 
-1. 已安装 Grok CLI（Grok Build）
-2. 本机存在或可创建目录 `~/.grok`
-3. macOS / Linux，bash 可用
-
-安装 Grok CLI（若尚未安装）：
-
-```bash
-curl -fsSL https://x.ai/cli/install.sh | bash
-grok --version
-```
+- macOS / Linux，bash 可用
+- 网络可访问 [x.ai](https://x.ai) 与 GitHub
+- 本机可创建目录 `~/.grok`
 
 ---
 
 ## 快速开始
 
+### 1. 安装 Grok Build（Grok CLI）
+
 ```bash
-cd /path/to/GrokBuild
+# 安装最新稳定版
+curl -fsSL https://x.ai/cli/install.sh | bash
 
-# 赋予执行权限（首次）
+# 验证安装
+grok --version
+```
+
+如需指定版本：
+
+```bash
+curl -fsSL https://x.ai/cli/install.sh | bash -s 0.1.42
+```
+
+安装完成后可随时升级：
+
+```bash
+grok update
+```
+
+### 2. 下载本仓库脚本与配置模板
+
+任选一种方式。
+
+**方式 A：Git 克隆（推荐）**
+
+```bash
+git clone https://github.com/zxfccmm4/GrokBuild.git
+cd GrokBuild
+```
+
+**方式 B：仅下载安装所需文件（无需 Git）**
+
+```bash
+mkdir -p GrokBuild && cd GrokBuild
+
+# 下载配置模板与安装脚本
+curl -fsSL -o config.toml \
+  https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/config.toml
+curl -fsSL -o install-config.sh \
+  https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/install-config.sh
+
 chmod +x install-config.sh
+```
 
-# 交互式安装配置
+**方式 C：下载 ZIP 并解压**
+
+```bash
+curl -fsSL -o GrokBuild.zip \
+  https://github.com/zxfccmm4/GrokBuild/archive/refs/heads/main.zip
+unzip GrokBuild.zip
+cd GrokBuild-main
+```
+
+### 3. 运行交互式配置安装
+
+```bash
+chmod +x install-config.sh   # 若尚未可执行
 ./install-config.sh
 ```
 
@@ -57,10 +103,10 @@ chmod +x install-config.sh
 4. 确认后安装；若已有 `~/.grok/config.toml`，会先备份为  
    `~/.grok/config.toml.bak.<时间戳>`
 
-验证：
+### 4. 验证并启动
 
 ```bash
-# 查看已安装配置（请自行注意不要把真实 key 贴到公开场合）
+# 查看已安装配置（请勿把真实 key 贴到公开场合）
 cat ~/.grok/config.toml
 
 # 启动 Grok
