@@ -11,12 +11,14 @@ Grok Build 的本地配置模板与交互式安装工具。
 ```text
 GrokBuild/
 ├── README.md            # 本说明
+├── bootstrap.sh         # 一键：装 CLI + 下载脚本 + 跑配置向导
 ├── config.toml          # 配置模板（含默认模型 / UI / 隐私相关选项）
-└── install-config.sh    # 交互式安装脚本
+└── install-config.sh    # 交互式配置安装脚本
 ```
 
 | 文件 | 说明 |
 |------|------|
+| `bootstrap.sh` | 一条命令完成：安装 Grok Build、下载本仓库文件、运行配置向导。 |
 | `config.toml` | 写入 `~/.grok/config.toml` 的模板。预览与文档中敏感字段已隐去。 |
 | `install-config.sh` | 交互安装：脱敏预览 → 填写模型别名 / `base_url` / `api_key` → 备份旧配置 → 写入目标。 |
 
@@ -30,15 +32,65 @@ GrokBuild/
 
 ---
 
-## 快速开始
+## 一键安装（推荐）
+
+在终端执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/bootstrap.sh | bash
+```
+
+这条命令会依次：
+
+1. **安装 Grok Build CLI**（若本机已有 `grok` 则跳过）
+2. **下载**本仓库的 `config.toml` 与 `install-config.sh`（默认到临时目录，结束后清理）
+3. **运行交互配置向导**，写入 `~/.grok/config.toml`
+
+向导中按提示填写：
+
+1. **模型别名**（回车保留默认 `Steve`）
+2. **base_url**（须以 `http://` 或 `https://` 开头）
+3. **api_key**（输入时不回显，可选二次核对）
+4. 确认安装（已有配置会先备份为 `~/.grok/config.toml.bak.<时间戳>`）
+
+可选环境变量：
+
+| 变量 | 含义 |
+|------|------|
+| `SKIP_GROK_CLI=1` | 跳过 CLI 安装，只下载并跑配置 |
+| `SKIP_CONFIG=1` | 只装 CLI，不跑配置向导 |
+| `GROKBUILD_WORKDIR=/path` | 把脚本下载到指定目录（不自动删除） |
+
+示例：
+
+```bash
+# 已装好 grok，只配置
+SKIP_GROK_CLI=1 curl -fsSL https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/bootstrap.sh | bash
+
+# 只装 CLI
+SKIP_CONFIG=1 curl -fsSL https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/bootstrap.sh | bash
+```
+
+装完后：
+
+```bash
+# 若当前 shell 找不到 grok
+export PATH="$HOME/.grok/bin:$PATH"
+
+grok --version
+grok
+```
+
+---
+
+## 分步安装（可选）
+
+若不想用一键脚本，可按下面分步操作。
 
 ### 1. 安装 Grok Build（Grok CLI）
 
 ```bash
-# 安装最新稳定版
 curl -fsSL https://x.ai/cli/install.sh | bash
-
-# 验证安装
 grok --version
 ```
 
@@ -48,7 +100,7 @@ grok --version
 curl -fsSL https://x.ai/cli/install.sh | bash -s 0.1.42
 ```
 
-安装完成后可随时升级：
+升级：
 
 ```bash
 grok update
@@ -56,9 +108,7 @@ grok update
 
 ### 2. 下载本仓库脚本与配置模板
 
-任选一种方式。
-
-**方式 A：Git 克隆（推荐）**
+**方式 A：Git 克隆**
 
 ```bash
 git clone https://github.com/zxfccmm4/GrokBuild.git
@@ -69,13 +119,10 @@ cd GrokBuild
 
 ```bash
 mkdir -p GrokBuild && cd GrokBuild
-
-# 下载配置模板与安装脚本
 curl -fsSL -o config.toml \
   https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/config.toml
 curl -fsSL -o install-config.sh \
   https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/install-config.sh
-
 chmod +x install-config.sh
 ```
 
@@ -91,26 +138,13 @@ cd GrokBuild-main
 ### 3. 运行交互式配置安装
 
 ```bash
-chmod +x install-config.sh   # 若尚未可执行
 ./install-config.sh
 ```
-
-按提示完成：
-
-1. 查看**脱敏后的**模板预览（`base_url`、`api_key` 显示为 `***REDACTED***`）
-2. 输入 **模型别名**（对应 `default = "..."` 与 `[model.名称]`；回车可保留模板默认 `Steve`）
-3. 输入你的 **base_url**（须以 `http://` 或 `https://` 开头）
-4. 输入你的 **api_key**（输入时不回显，可选二次核对）
-5. 确认后安装；若已有 `~/.grok/config.toml`，会先备份为  
-   `~/.grok/config.toml.bak.<时间戳>`
 
 ### 4. 验证并启动
 
 ```bash
-# 查看已安装配置（请勿把真实 key 贴到公开场合）
-cat ~/.grok/config.toml
-
-# 启动 Grok
+cat ~/.grok/config.toml   # 勿把真实 key 发到公开场合
 grok
 ```
 
@@ -360,6 +394,7 @@ default_reasoning_effort = "medium"  # 或 "low"
 | 现象 | 可能原因 | 处理 |
 |------|----------|------|
 | 脚本提示找不到 `config.toml` | 未在含模板的目录运行 | `cd` 到 `GrokBuild` 再执行 `./install-config.sh` |
+| 模型别名反复报格式无效 | 旧版脚本把提示符混入了输入值 | 更新到最新 `install-config.sh` 后重跑；合法示例：`Steve`、`MyProxy`、`work-grok`（也可直接回车用默认） |
 | `base_url` 反复报格式无效 | 缺少协议或含空格 | 使用 `https://host/v1` 形式 |
 | Grok 无法连上模型 | 地址错误、密钥错误、网关不可达 | 检查 `base_url` / `api_key`、网络与服务商控制台 |
 | 安装后行为与预期不符 | 读到了旧配置或备份未生效 | 确认编辑的是 `~/.grok/config.toml`，必要时重启 `grok` |

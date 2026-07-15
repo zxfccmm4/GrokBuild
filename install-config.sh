@@ -17,11 +17,12 @@ else
   BOLD= DIM= RED= GREEN= YELLOW= CYAN= RESET=
 fi
 
-info()  { printf '%s\n' "${CYAN}ℹ${RESET}  $*"; }
-ok()    { printf '%s\n' "${GREEN}✓${RESET}  $*"; }
-warn()  { printf '%s\n' "${YELLOW}!${RESET}  $*"; }
+# 交互提示一律走 stderr，避免被 $(...) 捕获污染返回值
+info()  { printf '%s\n' "${CYAN}ℹ${RESET}  $*" >&2; }
+ok()    { printf '%s\n' "${GREEN}✓${RESET}  $*" >&2; }
+warn()  { printf '%s\n' "${YELLOW}!${RESET}  $*" >&2; }
 err()   { printf '%s\n' "${RED}✗${RESET}  $*" >&2; }
-ask()   { printf '%s' "${BOLD}?${RESET}  $*"; }
+ask()   { printf '%s' "${BOLD}?${RESET}  $*" >&2; }
 
 # ---------- 路径 ----------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -53,11 +54,41 @@ redact_config() {
   ' "$1"
 }
 
+# curl | bash 时 stdin 是脚本管道，交互输入改从终端读
+read_from_tty() {
+  # usage: read_from_tty [-s] varname
+  local secret=0
+  if [[ "${1:-}" == "-s" ]]; then
+    secret=1
+    shift
+  fi
+  local __var="$1"
+  local __val=""
+  if [[ -r /dev/tty ]]; then
+    if [[ "$secret" -eq 1 ]]; then
+      # shellcheck disable=SC2162
+      read -r -s __val < /dev/tty || true
+      printf '\n' >&2
+    else
+      read -r __val < /dev/tty || true
+    fi
+  else
+    if [[ "$secret" -eq 1 ]]; then
+      # shellcheck disable=SC2162
+      read -r -s __val || true
+      printf '\n' >&2
+    else
+      read -r __val || true
+    fi
+  fi
+  printf -v "$__var" '%s' "$__val"
+}
+
 confirm() {
   local prompt="${1:-继续?}"
   local reply
   ask "${prompt} ${DIM}[y/N]${RESET} "
-  read -r reply || true
+  read_from_tty reply
   case "${reply:-}" in
     [yY]|[yY][eE][sS]) return 0 ;;
     *) return 1 ;;
@@ -68,7 +99,7 @@ read_line() {
   local prompt="$1"
   local value=""
   ask "${prompt}"
-  read -r value || true
+  read_from_tty value
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
   printf '%s' "$value"
@@ -78,13 +109,7 @@ read_secret() {
   local prompt="$1"
   local value=""
   ask "${prompt}"
-  if [[ -t 0 ]]; then
-    # shellcheck disable=SC2162
-    read -r -s value || true
-    printf '\n'
-  else
-    read -r value || true
-  fi
+  read_from_tty -s value
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
   printf '%s' "$value"
