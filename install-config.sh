@@ -347,16 +347,16 @@ main() {
   done
   printf '\n'
 
-  # 7. 强制自定义 api_key
-  info "请填写你的 API Key（输入时不回显）"
+  # 7. 强制自定义 api_key（明文输入，便于核对）
+  info "请填写你的 API Key（输入时可见，请注意周围环境）"
   local custom_key=""
-  custom_key="$(require_nonempty "api_key: " secret)"
-  ok "api_key（脱敏）: ${DIM}$(mask_secret "$custom_key")${RESET}"
+  custom_key="$(require_nonempty "api_key: " plain)"
+  ok "api_key: ${DIM}${custom_key}${RESET}"
   printf '\n'
 
   if confirm "是否再次输入 api_key 以核对?"; then
     local custom_key2
-    custom_key2="$(require_nonempty "再次输入 api_key: " secret)"
+    custom_key2="$(require_nonempty "再次输入 api_key: " plain)"
     if [[ "$custom_key" != "$custom_key2" ]]; then
       err "两次输入的 api_key 不一致，已取消。"
       exit 1
@@ -371,7 +371,7 @@ main() {
   printf '  目标:     %s\n' "${DIM}${TARGET_CONFIG}${RESET}"
   printf '  default:  %s\n' "${DIM}\"${custom_alias}\"  ([model.${custom_alias}])${RESET}"
   printf '  base_url: %s\n' "${DIM}${custom_url}${RESET}"
-  printf '  api_key:  %s\n' "${DIM}$(mask_secret "$custom_key")${RESET}"
+  printf '  api_key:  %s\n' "${DIM}${custom_key}${RESET}"
   printf '\n'
 
   if ! confirm "确认安装并覆盖目标配置?"; then

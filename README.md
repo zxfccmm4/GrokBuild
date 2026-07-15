@@ -50,7 +50,7 @@ curl -fsSL https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/bootstrap.s
 
 1. **模型别名**（回车保留默认 `Steve`）
 2. **base_url**（须以 `http://` 或 `https://` 开头）
-3. **api_key**（输入时不回显，可选二次核对）
+3. **api_key**（输入时可见，便于核对；可选二次输入确认）
 4. 确认安装（已有配置会先备份为 `~/.grok/config.toml.bak.<时间戳>`）
 
 可选环境变量：
