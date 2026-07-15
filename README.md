@@ -2,7 +2,7 @@
 
 Grok Build 的本地配置模板与交互式安装工具。
 
-安装官方 [Grok CLI](https://x.ai) 后，可用本仓库中的 `config.toml` 作为自定义模型模板，通过 `install-config.sh` 安全地写入 `~/.grok/config.toml`。**`base_url` 与 `api_key` 不会从模板原样复制**，必须在安装时由你本人填写。
+安装官方 [Grok CLI](https://x.ai) 后，可用本仓库中的 `config.toml` 作为自定义模型模板，通过 `install-config.sh` 安全地写入 `~/.grok/config.toml`。安装时可自定义 **模型别名**（`[models].default` / `[model.名称]`）、**`base_url`** 与 **`api_key`**；后两者不会从模板原样复制，必须由你填写。
 
 ---
 
@@ -18,7 +18,7 @@ GrokBuild/
 | 文件 | 说明 |
 |------|------|
 | `config.toml` | 写入 `~/.grok/config.toml` 的模板。预览与文档中敏感字段已隐去。 |
-| `install-config.sh` | 交互安装：脱敏预览 → 填写 `base_url` / `api_key` → 备份旧配置 → 写入目标。 |
+| `install-config.sh` | 交互安装：脱敏预览 → 填写模型别名 / `base_url` / `api_key` → 备份旧配置 → 写入目标。 |
 
 ---
 
@@ -98,9 +98,10 @@ chmod +x install-config.sh   # 若尚未可执行
 按提示完成：
 
 1. 查看**脱敏后的**模板预览（`base_url`、`api_key` 显示为 `***REDACTED***`）
-2. 输入你的 **base_url**（须以 `http://` 或 `https://` 开头）
-3. 输入你的 **api_key**（输入时不回显，可选二次核对）
-4. 确认后安装；若已有 `~/.grok/config.toml`，会先备份为  
+2. 输入 **模型别名**（对应 `default = "..."` 与 `[model.名称]`；回车可保留模板默认 `Steve`）
+3. 输入你的 **base_url**（须以 `http://` 或 `https://` 开头）
+4. 输入你的 **api_key**（输入时不回显，可选二次核对）
+5. 确认后安装；若已有 `~/.grok/config.toml`，会先备份为  
    `~/.grok/config.toml.bak.<时间戳>`
 
 ### 4. 验证并启动
@@ -123,10 +124,11 @@ grok
 |------|------|
 | 检查模板 | 要求脚本同目录下存在 `config.toml` |
 | 检查目录 | 若无 `~/.grok` 可询问后创建 |
-| 脱敏预览 | 将 `api_key`、`base_url` 等敏感/自定义字段显示为 `***REDACTED***` |
+| 脱敏预览 | 将 `api_key`、`base_url` 等敏感字段显示为 `***REDACTED***` |
+| 模型别名 | 可自定义 `default` 与对应的 `[model.名称]`（回车保留模板名，如 `Steve`） |
 | 强制自定义 | **必须**交互填写 `base_url` 与 `api_key`，不沿用模板里的值 |
 | 备份 | 覆盖前备份已有 `config.toml` |
-| 写入 | 用模板其余字段 + 你的 `base_url` / `api_key` 生成目标文件，权限尽量设为 `600` |
+| 写入 | 用模板其余字段 + 你的别名 / `base_url` / `api_key` 生成目标文件，权限尽量设为 `600` |
 
 ### 手动安装（不推荐）
 
@@ -135,7 +137,7 @@ grok
 ```bash
 mkdir -p ~/.grok
 cp config.toml ~/.grok/config.toml
-# 务必修改 base_url 与 api_key
+# 按需修改：default / [model.名称]、base_url、api_key
 $EDITOR ~/.grok/config.toml
 chmod 600 ~/.grok/config.toml
 ```
@@ -164,7 +166,7 @@ Grok 从用户目录读取配置：
 ~/.grok/config.toml
 ```
 
-本仓库的 `config.toml` 是一份**开箱可用的自定义模型模板**：默认模型别名、关闭遥测、限制代码库上传、以及偏宽松的权限模式等。安装后你只需保证 `base_url` / `api_key` 正确，即可用自定义兼容接口调用模型。
+本仓库的 `config.toml` 是一份**开箱可用的自定义模型模板**：默认模型别名、关闭遥测、限制代码库上传、以及偏宽松的权限模式等。安装时可改模型别名，并保证 `base_url` / `api_key` 正确，即可用自定义兼容接口调用模型。
 
 ### 脱敏后的结构示例
 
@@ -175,10 +177,10 @@ Grok 从用户目录读取配置：
 installer = "internal"
 
 [models]
-default = "Steve"
+default = "Steve"             # 可自定义；与下方 [model.名称] 一致
 default_reasoning_effort = "high"
 
-[model.Steve]
+[model.Steve]                 # 段名 = 上面的 default，可一并改名
 model = "grok-4.5"
 base_url = "***REDACTED***"   # 安装时由你填写
 name = "grok-4.5"
@@ -222,14 +224,24 @@ permission_mode = "always-approve"
 
 | 键 | 示例 | 说明 |
 |----|------|------|
-| `default` | `"Steve"` | 默认使用的**模型配置名**，对应下方 `[model.Steve]` 段。 |
+| `default` | `"Steve"` | 默认使用的**模型配置名**（本地别名），必须与下方某个 `[model.名称]` 段名一致。**可自定义**，安装脚本会询问；回车则保留模板值。 |
 | `default_reasoning_effort` | `"high"` | 默认推理强度。常见取值：`low` / `medium` / `high`。 |
 
-修改默认模型时：既可改 `default` 指向另一个 `[model.XXX]`，也可继续用 `Steve` 只改该段内字段。
+`default` 只是本地昵称，**不是**上游 API 的模型 ID。例如可以写成：
 
-#### `[model.Steve]`（自定义模型）
+```toml
+[models]
+default = "MyProxy"
 
-段名 `Steve` 是本地别名，可按需改成其他名字（同时更新 `[models].default`）。
+[model.MyProxy]
+# ...
+```
+
+安装脚本会同步改写 `default = "..."` 与 `[model.名称]`，避免两者不一致。
+
+#### `[model.名称]`（自定义模型）
+
+段名（如模板中的 `Steve`）是本地别名，须与 `[models].default` 相同。安装时可改成 `MyProxy`、`work-grok` 等。
 
 | 键 | 是否必填自定义 | 说明 |
 |----|----------------|------|
@@ -240,6 +252,8 @@ permission_mode = "always-approve"
 | `context_window` | 否 | 上下文窗口 token 上限（模板为 `500000`）。按服务商能力调整。 |
 | `supports_reasoning_effort` | 否 | 是否支持推理强度参数。 |
 | `reasoning_efforts` | 否 | 可选的推理强度列表，供 UI / 命令选择。 |
+
+**模型别名命名建议：** 字母开头，后接字母 / 数字 / `_` / `-`（如 `Steve`、`MyProxy`、`work_grok`）。
 
 **`base_url` 填写注意：**
 
@@ -298,21 +312,23 @@ permission_mode = "always-approve"
 $EDITOR ~/.grok/config.toml
 ```
 
-修改 `[model.Steve]` 中的：
+修改对应 `[model.你的别名]` 中的：
 
 ```toml
 base_url = "https://你的网关/v1"
 api_key = "你的密钥"
 ```
 
-### 换默认模型名
+### 换默认模型别名（`default` / `[model.名称]`）
+
+安装脚本会一步改好；若手动修改，**两处必须一致**：
 
 ```toml
 [models]
-default = "MyProxy"
+default = "MyProxy"          # 本地别名，可任意合法标识符
 
-[model.MyProxy]
-model = "grok-4.5"
+[model.MyProxy]              # 段名必须与 default 相同
+model = "grok-4.5"           # 上游真实模型 ID
 base_url = "https://你的网关/v1"
 name = "grok-4.5"
 api_key = "你的密钥"
@@ -320,6 +336,11 @@ context_window = 500000
 supports_reasoning_effort = true
 reasoning_efforts = ["low", "medium", "high"]
 ```
+
+| 字段 | 含义 | 示例 |
+|------|------|------|
+| `default` / `[model.XXX]` | 本地配置名，仅 Grok 用来选配置 | `Steve`、`MyProxy` |
+| `model` | 发给 API 的真实模型 ID | `grok-4.5` |
 
 ### 降低默认推理强度（更省、更快）
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # install-config.sh — 交互式将 GrokBuild 配置安装到 ~/.grok/config.toml
-# base_url 与 api_key 必须由用户自定义；预览时自动隐去。
+# model 别名、base_url、api_key 由用户自定义；预览时隐去敏感字段。
 
 set -euo pipefail
 
@@ -29,12 +29,11 @@ SOURCE_CONFIG="${SCRIPT_DIR}/config.toml"
 TARGET_DIR="${HOME}/.grok"
 TARGET_CONFIG="${TARGET_DIR}/config.toml"
 
-# 预览时需隐去的键（含 base_url / api_key 等）
+# 预览时需隐去的键
 REDACT_KEYS_RE='^(api[_-]?key|base[_-]?url|secret|token|password|passwd|authorization|auth[_-]?token|access[_-]?key)$'
 
 # ---------- 工具函数 ----------
 redact_config() {
-  # 将敏感/自定义键的值替换为 ***REDACTED***
   awk -v re="$REDACT_KEYS_RE" '
     BEGIN { IGNORECASE = 1 }
     {
@@ -66,19 +65,16 @@ confirm() {
 }
 
 read_line() {
-  # 普通输入（可回显）
   local prompt="$1"
   local value=""
   ask "${prompt}"
   read -r value || true
-  # 去掉首尾空白
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
   printf '%s' "$value"
 }
 
 read_secret() {
-  # 敏感输入（尽量不回显）
   local prompt="$1"
   local value=""
   ask "${prompt}"
@@ -106,7 +102,6 @@ mask_secret() {
 }
 
 require_nonempty() {
-  # $1=提示 $2=模式: plain|secret
   local prompt="$1"
   local mode="${2:-plain}"
   local value=""
@@ -124,13 +119,52 @@ require_nonempty() {
   done
 }
 
+# 读取带默认值的输入：回车则用 default
+read_with_default() {
+  local prompt="$1"
+  local default="$2"
+  local value
+  value="$(read_line "${prompt}${DIM}[默认: ${default}]${RESET} ")"
+  if [[ -z "$value" ]]; then
+    printf '%s' "$default"
+  else
+    printf '%s' "$value"
+  fi
+}
+
 validate_base_url() {
   local url="$1"
-  # 简单校验：http(s):// 开头
   if [[ "$url" =~ ^https?://[^[:space:]]+$ ]]; then
     return 0
   fi
   return 1
+}
+
+# 模型别名：用作 [model.Name] 与 default = "Name"
+# 允许字母开头，后接字母/数字/_/-
+validate_model_alias() {
+  local name="$1"
+  if [[ "$name" =~ ^[A-Za-z][A-Za-z0-9_-]*$ ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# 从模板解析当前 [model.XXX] 段名（取第一个）
+detect_template_model_alias() {
+  local src="$1"
+  local name
+  name="$(awk '
+    match($0, /^\[model\.([A-Za-z0-9_-]+)\]/, a) { print a[1]; exit }
+    # 兼容无第三参数的 awk：用 sub
+  ' "$src" 2>/dev/null || true)"
+  if [[ -z "${name:-}" ]]; then
+    name="$(sed -n 's/^\[model\.\([A-Za-z0-9_-]*\)\]/\1/p' "$src" | head -n1)"
+  fi
+  if [[ -z "${name:-}" ]]; then
+    name="Steve"
+  fi
+  printf '%s' "$name"
 }
 
 backup_if_exists() {
@@ -145,7 +179,6 @@ backup_if_exists() {
 }
 
 escape_toml_string() {
-  # 转义写入 TOML 双引号字符串时的 \ 与 "
   local s="$1"
   s="${s//\\/\\\\}"
   s="${s//\"/\\\"}"
@@ -153,19 +186,45 @@ escape_toml_string() {
 }
 
 write_config() {
-  # 将源配置写入目标，强制替换 base_url 与 api_key
+  # 替换：模型别名、base_url、api_key
   local src="$1"
   local dest="$2"
-  local new_url="$3"
-  local new_key="$4"
+  local old_alias="$3"
+  local new_alias="$4"
+  local new_url="$5"
+  local new_key="$6"
 
-  local esc_url esc_key
+  local esc_url esc_key esc_alias
   esc_url="$(escape_toml_string "$new_url")"
   esc_key="$(escape_toml_string "$new_key")"
+  esc_alias="$(escape_toml_string "$new_alias")"
 
-  awk -v new_url="$esc_url" -v new_key="$esc_key" '
-    BEGIN { IGNORECASE = 1 }
+  awk -v old_alias="$old_alias" \
+      -v new_alias="$esc_alias" \
+      -v new_url="$esc_url" \
+      -v new_key="$esc_key" '
+    BEGIN { IGNORECASE = 0 }
     {
+      # [model.OldAlias] -> [model.NewAlias]
+      if ($0 ~ ("^\\[model\\." old_alias "\\][[:space:]]*$")) {
+        printf "[model.%s]\n", new_alias
+        next
+      }
+
+      # default = "OldAlias" （仅替换值等于旧别名的 default）
+      if (match($0, /^[[:space:]]*default[[:space:]]*=[[:space:]]*/)) {
+        rest = substr($0, RSTART + RLENGTH)
+        # 去掉引号后的值
+        val = rest
+        gsub(/^["'\'']|["'\''][[:space:]]*$/, "", val)
+        if (val == old_alias) {
+          indent = $0
+          sub(/[^[:space:]].*$/, "", indent)
+          printf "%sdefault = \"%s\"\n", indent, new_alias
+          next
+        }
+      }
+
       if (match($0, /^[[:space:]]*base[_-]?url[[:space:]]*=[[:space:]]*/)) {
         indent = $0
         sub(/[^[:space:]].*$/, "", indent)
@@ -188,7 +247,7 @@ main() {
   printf '\n'
   printf '%s\n' "${BOLD}Grok Build 配置安装向导${RESET}"
   printf '%s\n' "${DIM}将模板配置安装到 ~/.grok/config.toml${RESET}"
-  printf '%s\n' "${DIM}base_url 与 api_key 必须由你自定义填写${RESET}"
+  printf '%s\n' "${DIM}可自定义：模型别名 (default) / base_url / api_key${RESET}"
   printf '\n'
 
   # 1. 检查源文件
@@ -198,6 +257,10 @@ main() {
     exit 1
   fi
   ok "模板配置: ${DIM}${SOURCE_CONFIG}${RESET}"
+
+  local template_alias
+  template_alias="$(detect_template_model_alias "$SOURCE_CONFIG")"
+  ok "模板模型别名: ${DIM}${template_alias}${RESET}  →  [model.${template_alias}]"
 
   # 2. 检查目标目录
   if [[ ! -d "$TARGET_DIR" ]]; then
@@ -213,9 +276,9 @@ main() {
     ok "目标目录: ${DIM}${TARGET_DIR}${RESET}"
   fi
 
-  # 3. 展示脱敏预览（base_url / api_key 均隐去）
+  # 3. 展示脱敏预览
   printf '\n'
-  info "模板预览（base_url / api_key 等已隐去，安装时需你填写）:"
+  info "模板预览（敏感字段已隐去；安装时需填写自定义项）:"
   printf '%s\n' "${DIM}────────────────────────────────────────${RESET}"
   redact_config "$SOURCE_CONFIG" | sed 's/^/  /'
   printf '%s\n' "${DIM}────────────────────────────────────────${RESET}"
@@ -230,7 +293,22 @@ main() {
   fi
   printf '\n'
 
-  # 5. 强制自定义 base_url
+  # 5. 自定义模型别名 default / [model.XXX]
+  info "请设置本地模型配置名（对应 [models].default 与 [model.名称]）"
+  printf '  %s\n' "${DIM}仅允许字母开头，后接字母/数字/_/- ；回车保留模板名${RESET}"
+  printf '  %s\n' "${DIM}示例: Steve / MyProxy / work-grok${RESET}"
+  local custom_alias=""
+  while true; do
+    custom_alias="$(read_with_default "模型别名 (default): " "$template_alias")"
+    if validate_model_alias "$custom_alias"; then
+      ok "default = \"${custom_alias}\"  →  [model.${custom_alias}]"
+      break
+    fi
+    warn "格式无效。请使用如 MyModel、work_proxy、Grok-Home 这类标识符。"
+  done
+  printf '\n'
+
+  # 6. 强制自定义 base_url
   info "请填写你的 API 服务地址（base_url）"
   printf '  %s\n' "${DIM}示例: https://api.example.com/v1${RESET}"
   local custom_url=""
@@ -244,14 +322,13 @@ main() {
   done
   printf '\n'
 
-  # 6. 强制自定义 api_key
+  # 7. 强制自定义 api_key
   info "请填写你的 API Key（输入时不回显）"
   local custom_key=""
   custom_key="$(require_nonempty "api_key: " secret)"
   ok "api_key（脱敏）: ${DIM}$(mask_secret "$custom_key")${RESET}"
   printf '\n'
 
-  # 可选：再确认一次 api_key
   if confirm "是否再次输入 api_key 以核对?"; then
     local custom_key2
     custom_key2="$(require_nonempty "再次输入 api_key: " secret)"
@@ -263,10 +340,11 @@ main() {
     printf '\n'
   fi
 
-  # 7. 最终确认
+  # 8. 最终确认
   info "即将写入:"
-  printf '  模板:   %s\n' "${DIM}${SOURCE_CONFIG}${RESET}"
-  printf '  目标:   %s\n' "${DIM}${TARGET_CONFIG}${RESET}"
+  printf '  模板:     %s\n' "${DIM}${SOURCE_CONFIG}${RESET}"
+  printf '  目标:     %s\n' "${DIM}${TARGET_CONFIG}${RESET}"
+  printf '  default:  %s\n' "${DIM}\"${custom_alias}\"  ([model.${custom_alias}])${RESET}"
   printf '  base_url: %s\n' "${DIM}${custom_url}${RESET}"
   printf '  api_key:  %s\n' "${DIM}$(mask_secret "$custom_key")${RESET}"
   printf '\n'
@@ -276,7 +354,7 @@ main() {
     exit 0
   fi
 
-  # 8. 备份 + 写入
+  # 9. 备份 + 写入
   printf '\n'
   backup_if_exists "$TARGET_CONFIG"
 
@@ -284,13 +362,13 @@ main() {
   tmp="$(mktemp "${TARGET_DIR}/.config.toml.XXXXXX")"
   chmod 600 "$tmp" 2>/dev/null || true
 
-  write_config "$SOURCE_CONFIG" "$tmp" "$custom_url" "$custom_key"
+  write_config "$SOURCE_CONFIG" "$tmp" "$template_alias" "$custom_alias" "$custom_url" "$custom_key"
   mv -f "$tmp" "$TARGET_CONFIG"
   chmod 600 "$TARGET_CONFIG" 2>/dev/null || true
 
   ok "配置已安装 → ${BOLD}${TARGET_CONFIG}${RESET}"
 
-  # 9. 安装后脱敏展示
+  # 10. 安装后脱敏展示
   printf '\n'
   info "安装后内容预览（敏感字段已隐去）:"
   printf '%s\n' "${DIM}────────────────────────────────────────${RESET}"
