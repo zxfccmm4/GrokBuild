@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # install-config.sh — 交互式将 GrokBuild 配置安装到 ~/.grok/config.toml
-# model 别名、base_url、api_key 由用户自定义；预览时隐去敏感字段。
+# 可自定义：模型别名、base_url、api_key、是否开启 Search Tool（web_search / x_search）
+# 预览时隐去敏感字段。
 
 set -euo pipefail
 
@@ -91,6 +92,18 @@ confirm() {
   read_from_tty reply
   case "${reply:-}" in
     [yY]|[yY][eE][sS]) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# 默认 yes 的确认（用于推荐开启的选项）
+confirm_default_yes() {
+  local prompt="${1:-继续?}"
+  local reply
+  ask "${prompt} ${DIM}[Y/n]${RESET} "
+  read_from_tty reply
+  case "${reply:-}" in
+    ""|[yY]|[yY][eE][sS]) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -210,42 +223,150 @@ escape_toml_string() {
   printf '%s' "$s"
 }
 
+# 写入配置：别名 / base_url / api_key / 可选 Search Tool
+# enable_search: "1" 开启，"0" 关闭
 write_config() {
-  # 替换：模型别名、base_url、api_key
   local src="$1"
   local dest="$2"
   local old_alias="$3"
   local new_alias="$4"
   local new_url="$5"
   local new_key="$6"
+  local enable_search="${7:-0}"
 
   local esc_url esc_key esc_alias
   esc_url="$(escape_toml_string "$new_url")"
   esc_key="$(escape_toml_string "$new_key")"
   esc_alias="$(escape_toml_string "$new_alias")"
 
+  # BSD awk 兼容：避免函数内多行布尔表达式
   awk -v old_alias="$old_alias" \
       -v new_alias="$esc_alias" \
       -v new_url="$esc_url" \
-      -v new_key="$esc_key" '
-    BEGIN { IGNORECASE = 0 }
+      -v new_key="$esc_key" \
+      -v enable_search="$enable_search" '
+    BEGIN {
+      IGNORECASE = 0
+      in_models = 0
+      in_model = 0
+      wrote_web_search = 0
+      wrote_backend = 0
+    }
+
+    function flush_web_search() {
+      if (enable_search == "1" && in_models && !wrote_web_search) {
+        printf "web_search = \"%s\"\n", new_alias
+        print ""
+        wrote_web_search = 1
+      }
+    }
+
+    function flush_backend() {
+      if (enable_search == "1" && in_model && !wrote_backend) {
+        print "api_backend = \"responses\""
+        print "supports_backend_search = true"
+        print ""
+        wrote_backend = 1
+      }
+    }
+
+    function is_search_comment(line,   t) {
+      if (line !~ /^[[:space:]]*#/) return 0
+      t = line
+      if (t ~ /web_search/) return 1
+      if (t ~ /api_backend/) return 1
+      if (t ~ /supports_backend_search/) return 1
+      if (t ~ /Optional: point Build/) return 1
+      if (t ~ /Optional: native web_search/) return 1
+      if (t ~ /Enable via install-config/) return 1
+      return 0
+    }
+
     {
+      # 进入新 section 前，冲刷未写完的字段
+      if ($0 ~ /^\[/) {
+        flush_web_search()
+        flush_backend()
+        in_models = 0
+        in_model = 0
+      }
+
       # [model.OldAlias] -> [model.NewAlias]
       if ($0 ~ ("^\\[model\\." old_alias "\\][[:space:]]*$")) {
         printf "[model.%s]\n", new_alias
+        in_model = 1
+        in_models = 0
+        wrote_backend = 0
         next
       }
 
-      # default = "OldAlias" （仅替换值等于旧别名的 default）
+      if ($0 ~ /^\[models\][[:space:]]*$/) {
+        in_models = 1
+        in_model = 0
+        print
+        next
+      }
+
+      if ($0 ~ /^\[model\./) {
+        in_model = 1
+        in_models = 0
+        wrote_backend = 0
+        print
+        next
+      }
+
+      # 开启 Search 时：跳过模板相关注释；段末空白留给 flush_web_search 统一排版
+      if (enable_search == "1" && is_search_comment($0)) {
+        next
+      }
+      # 段内空白在 flush_* 时统一补，避免注释删掉后叠空行
+      if (enable_search == "1" && (in_models || in_model) && $0 ~ /^[[:space:]]*$/) {
+        next
+      }
+
+      # 关闭 Search 时：去掉可能已存在的生效项（从旧配置当模板时）
+      if (enable_search != "1") {
+        if (match($0, /^[[:space:]]*web_search[[:space:]]*=/)) next
+        if (match($0, /^[[:space:]]*api_backend[[:space:]]*=/)) next
+        if (match($0, /^[[:space:]]*supports_backend_search[[:space:]]*=/)) next
+      }
+
+      # default = "OldAlias"
       if (match($0, /^[[:space:]]*default[[:space:]]*=[[:space:]]*/)) {
         rest = substr($0, RSTART + RLENGTH)
-        # 去掉引号后的值
         val = rest
         gsub(/^["'\'']|["'\''][[:space:]]*$/, "", val)
         if (val == old_alias) {
           indent = $0
           sub(/[^[:space:]].*$/, "", indent)
           printf "%sdefault = \"%s\"\n", indent, new_alias
+          next
+        }
+      }
+
+      # 已有 web_search 行：开启时改写为新别名
+      if (match($0, /^[[:space:]]*web_search[[:space:]]*=/)) {
+        if (enable_search == "1") {
+          indent = $0
+          sub(/[^[:space:]].*$/, "", indent)
+          printf "%sweb_search = \"%s\"\n", indent, new_alias
+          wrote_web_search = 1
+          next
+        }
+      }
+
+      # 已有 api_backend / supports_backend_search：开启时规范化
+      if (match($0, /^[[:space:]]*api_backend[[:space:]]*=/)) {
+        if (enable_search == "1") {
+          print "api_backend = \"responses\""
+          wrote_backend = 1
+          next
+        }
+      }
+      if (match($0, /^[[:space:]]*supports_backend_search[[:space:]]*=/)) {
+        if (enable_search == "1") {
+          print "supports_backend_search = true"
+          wrote_backend = 1
           next
         }
       }
@@ -264,6 +385,11 @@ write_config() {
       }
       print
     }
+
+    END {
+      flush_web_search()
+      flush_backend()
+    }
   ' "$src" > "$dest"
 }
 
@@ -272,7 +398,7 @@ main() {
   printf '\n'
   printf '%s\n' "${BOLD}Grok Build 配置安装向导${RESET}"
   printf '%s\n' "${DIM}将模板配置安装到 ~/.grok/config.toml${RESET}"
-  printf '%s\n' "${DIM}可自定义：模型别名 (default) / base_url / api_key${RESET}"
+  printf '%s\n' "${DIM}可自定义：模型别名 / base_url / api_key / Search Tool${RESET}"
   printf '\n'
 
   # 1. 检查源文件
@@ -365,13 +491,36 @@ main() {
     printf '\n'
   fi
 
-  # 8. 最终确认
+  # 8. 可选：Search Tool（web_search / x_search）
+  info "Search Tool（可选）"
+  printf '  %s\n' "${DIM}开启后写入：${RESET}"
+  printf '  %s\n' "${DIM}  [models] web_search = \"<别名>\"${RESET}"
+  printf '  %s\n' "${DIM}  [model.*] api_backend = \"responses\"${RESET}"
+  printf '  %s\n' "${DIM}  [model.*] supports_backend_search = true${RESET}"
+  printf '  %s\n' "${DIM}适用：grok2api 等已支持原生 web_search / x_search 的网关${RESET}"
+  printf '  %s\n' "${DIM}关闭则保持模板注释，不启用服务端搜索${RESET}"
+  local enable_search=0
+  if confirm "是否开启 Search Tool?"; then
+    enable_search=1
+    ok "Search Tool: ${BOLD}开启${RESET}"
+  else
+    enable_search=0
+    ok "Search Tool: ${DIM}关闭（默认）${RESET}"
+  fi
+  printf '\n'
+
+  # 9. 最终确认
   info "即将写入:"
-  printf '  模板:     %s\n' "${DIM}${SOURCE_CONFIG}${RESET}"
-  printf '  目标:     %s\n' "${DIM}${TARGET_CONFIG}${RESET}"
-  printf '  default:  %s\n' "${DIM}\"${custom_alias}\"  ([model.${custom_alias}])${RESET}"
-  printf '  base_url: %s\n' "${DIM}${custom_url}${RESET}"
-  printf '  api_key:  %s\n' "${DIM}${custom_key}${RESET}"
+  printf '  模板:        %s\n' "${DIM}${SOURCE_CONFIG}${RESET}"
+  printf '  目标:        %s\n' "${DIM}${TARGET_CONFIG}${RESET}"
+  printf '  default:     %s\n' "${DIM}\"${custom_alias}\"  ([model.${custom_alias}])${RESET}"
+  printf '  base_url:    %s\n' "${DIM}${custom_url}${RESET}"
+  printf '  api_key:     %s\n' "${DIM}${custom_key}${RESET}"
+  if [[ "$enable_search" -eq 1 ]]; then
+    printf '  search:      %s\n' "${GREEN}开启${RESET}  ${DIM}(web_search + responses backend)${RESET}"
+  else
+    printf '  search:      %s\n' "${DIM}关闭${RESET}"
+  fi
   printf '\n'
 
   if ! confirm "确认安装并覆盖目标配置?"; then
@@ -379,7 +528,7 @@ main() {
     exit 0
   fi
 
-  # 9. 备份 + 写入
+  # 10. 备份 + 写入
   printf '\n'
   backup_if_exists "$TARGET_CONFIG"
 
@@ -387,19 +536,23 @@ main() {
   tmp="$(mktemp "${TARGET_DIR}/.config.toml.XXXXXX")"
   chmod 600 "$tmp" 2>/dev/null || true
 
-  write_config "$SOURCE_CONFIG" "$tmp" "$template_alias" "$custom_alias" "$custom_url" "$custom_key"
+  write_config "$SOURCE_CONFIG" "$tmp" "$template_alias" "$custom_alias" "$custom_url" "$custom_key" "$enable_search"
   mv -f "$tmp" "$TARGET_CONFIG"
   chmod 600 "$TARGET_CONFIG" 2>/dev/null || true
 
   ok "配置已安装 → ${BOLD}${TARGET_CONFIG}${RESET}"
 
-  # 10. 安装后脱敏展示
+  # 11. 安装后脱敏展示
   printf '\n'
   info "安装后内容预览（敏感字段已隐去）:"
   printf '%s\n' "${DIM}────────────────────────────────────────${RESET}"
   redact_config "$TARGET_CONFIG" | sed 's/^/  /'
   printf '%s\n' "${DIM}────────────────────────────────────────${RESET}"
   printf '\n'
+  if [[ "$enable_search" -eq 1 ]]; then
+    ok "Search Tool 已开启。重启 grok 或新开 session 后生效。"
+    info "试用: 请 web_search 最新 xAI 新闻并给来源"
+  fi
   ok "完成。可运行 grok 验证配置是否生效。"
   printf '\n'
 }

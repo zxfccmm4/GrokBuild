@@ -4,6 +4,9 @@ installer = "internal"
 [models]
 default = "Steve"
 default_reasoning_effort = "high"
+# Optional: point Build's web_search tool at this custom model.
+# Enable via install-config.sh ("开启 Search Tool") or uncomment:
+# web_search = "Steve"
 
 [model.Steve]
 model = "grok-4.5"
@@ -17,6 +20,10 @@ reasoning_efforts = [
     "medium",
     "high",
 ]
+# Optional: native web_search / x_search via Responses API (e.g. grok2api Build channel).
+# Enable via install-config.sh ("开启 Search Tool") or uncomment both:
+# api_backend = "responses"
+# supports_backend_search = true
 
 [features]
 telemetry = false
