@@ -1,7 +1,13 @@
 #!/usr/bin/env bash
 # install-config.sh — 交互式将 GrokBuild 配置安装到 ~/.grok/config.toml
 # 可自定义：模型别名、base_url、api_key、是否开启 Search Tool（web_search / x_search）
+# 可选：安装 grok-search skill（search / fetch / map）
 # 预览时隐去敏感字段。
+#
+# 可选环境变量：
+#   SKIP_GROK_SEARCH=1          跳过 grok-search skill 安装步骤
+#   GROK_SEARCH_REPO            git 仓库 URL（默认 Autsunset/grok-search）
+#   GROK_SEARCH_DIR             skill 安装目录（默认 ~/.grok/skills/grok-search）
 
 set -euo pipefail
 
@@ -30,6 +36,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SOURCE_CONFIG="${SCRIPT_DIR}/config.toml"
 TARGET_DIR="${HOME}/.grok"
 TARGET_CONFIG="${TARGET_DIR}/config.toml"
+
+# grok-search skill
+SKIP_GROK_SEARCH="${SKIP_GROK_SEARCH:-0}"
+GROK_SEARCH_REPO="${GROK_SEARCH_REPO:-https://github.com/Autsunset/grok-search.git}"
+GROK_SEARCH_DIR="${GROK_SEARCH_DIR:-${HOME}/.grok/skills/grok-search}"
+GROK_SEARCH_CONFIG_DIR="${HOME}/.config/grok-search"
+GROK_SEARCH_CONFIG="${GROK_SEARCH_CONFIG_DIR}/config.json"
+GROK_SEARCH_MIN_NODE_MAJOR=18
+GROK_SEARCH_MIN_NODE_MINOR=17
 
 # 预览时需隐去的键
 REDACT_KEYS_RE='^(api[_-]?key|base[_-]?url|secret|token|password|passwd|authorization|auth[_-]?token|access[_-]?key)$'
@@ -393,12 +408,363 @@ write_config() {
   ' "$src" > "$dest"
 }
 
+# ---------- grok-search skill ----------
+# 解析 node 主.次版本；失败返回非 0
+node_version_ok() {
+  command -v node >/dev/null 2>&1 || return 1
+  local ver major minor
+  ver="$(node -v 2>/dev/null | sed 's/^v//')"
+  major="${ver%%.*}"
+  minor="${ver#*.}"
+  minor="${minor%%.*}"
+  [[ "$major" =~ ^[0-9]+$ && "$minor" =~ ^[0-9]+$ ]] || return 1
+  if (( major > GROK_SEARCH_MIN_NODE_MAJOR )); then
+    return 0
+  fi
+  if (( major == GROK_SEARCH_MIN_NODE_MAJOR && minor >= GROK_SEARCH_MIN_NODE_MINOR )); then
+    return 0
+  fi
+  return 1
+}
+
+# 粗略推断 apiProvider：openrouter / xai / openai-compatible
+infer_api_provider() {
+  local url
+  url="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$url" == *openrouter* ]]; then
+    printf '%s' "openrouter"
+  elif [[ "$url" == *api.x.ai* ]]; then
+    printf '%s' "xai"
+  else
+    printf '%s' "openai-compatible"
+  fi
+}
+
+# JSON 字符串转义
+escape_json_string() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+mask_key_short() {
+  local s="$1"
+  if [[ -z "$s" ]]; then
+    printf '%s' "(空)"
+  elif [[ ${#s} -le 8 ]]; then
+    printf '%s' "****"
+  else
+    printf '%s****%s' "${s:0:4}" "${s: -4}"
+  fi
+}
+
+# 写入 ~/.config/grok-search/config.json
+write_grok_search_config() {
+  local api_url="$1"
+  local api_key="$2"
+  local search_endpoint="$3"
+  local model="$4"
+  local api_provider
+  api_provider="$(infer_api_provider "$api_url")"
+
+  local esc_url esc_key esc_model esc_provider esc_endpoint
+  esc_url="$(escape_json_string "$api_url")"
+  esc_key="$(escape_json_string "$api_key")"
+  esc_model="$(escape_json_string "$model")"
+  esc_provider="$(escape_json_string "$api_provider")"
+  esc_endpoint="$(escape_json_string "$search_endpoint")"
+
+  mkdir -p "$GROK_SEARCH_CONFIG_DIR"
+  chmod 700 "$GROK_SEARCH_CONFIG_DIR" 2>/dev/null || true
+
+  local tmp
+  tmp="$(mktemp "${GROK_SEARCH_CONFIG_DIR}/.config.json.XXXXXX")"
+  chmod 600 "$tmp" 2>/dev/null || true
+
+  if [[ "$search_endpoint" == "chat" ]]; then
+    cat > "$tmp" <<EOF
+{
+  "apiUrl": "${esc_url}",
+  "apiKey": "${esc_key}",
+  "apiProvider": "${esc_provider}",
+  "searchEndpoint": "chat",
+  "model": "${esc_model}",
+  "defaultExtra": 6,
+  "sourceChars": 400
+}
+EOF
+  else
+    cat > "$tmp" <<EOF
+{
+  "apiUrl": "${esc_url}",
+  "apiKey": "${esc_key}",
+  "apiProvider": "${esc_provider}",
+  "searchEndpoint": "responses",
+  "model": "${esc_model}",
+  "responsesMaxTurns": 3,
+  "responsesReasoningEffort": "low",
+  "defaultExtra": 6,
+  "sourceChars": 400
+}
+EOF
+  fi
+
+  mv -f "$tmp" "$GROK_SEARCH_CONFIG"
+  chmod 600 "$GROK_SEARCH_CONFIG" 2>/dev/null || true
+}
+
+# clone 或更新 skill 仓库，并 npm install
+install_grok_search_repo() {
+  local dest="$GROK_SEARCH_DIR"
+  local parent
+  parent="$(dirname "$dest")"
+  mkdir -p "$parent"
+
+  if [[ -d "${dest}/.git" ]]; then
+    info "已存在 skill 仓库，尝试 git pull …"
+    if git -C "$dest" pull --ff-only 2>/dev/null; then
+      ok "已更新: ${DIM}${dest}${RESET}"
+    else
+      warn "git pull 失败，继续使用现有目录: ${DIM}${dest}${RESET}"
+    fi
+  elif [[ -d "$dest" ]]; then
+    if [[ -f "${dest}/SKILL.md" && -f "${dest}/scripts/search.js" ]]; then
+      ok "已存在 skill 目录（非 git）: ${DIM}${dest}${RESET}"
+    else
+      err "目录已存在但不是有效的 grok-search: ${dest}"
+      return 1
+    fi
+  else
+    info "克隆 grok-search → ${DIM}${dest}${RESET}"
+    if ! git clone --depth 1 "$GROK_SEARCH_REPO" "$dest"; then
+      err "git clone 失败: ${GROK_SEARCH_REPO}"
+      return 1
+    fi
+    ok "已克隆 skill"
+  fi
+
+  if [[ ! -f "${dest}/SKILL.md" ]]; then
+    err "缺少 SKILL.md: ${dest}"
+    return 1
+  fi
+  if [[ ! -f "${dest}/scripts/search.js" ]]; then
+    err "缺少 scripts/search.js: ${dest}"
+    return 1
+  fi
+
+  if [[ ! -d "${dest}/node_modules/undici" ]]; then
+    info "安装 npm 依赖（undici）…"
+    if ! (cd "$dest" && npm install --no-fund --no-audit); then
+      err "npm install 失败。请检查 Node/npm 网络后手动执行:"
+      err "  cd ${dest} && npm install"
+      return 1
+    fi
+    ok "npm 依赖已安装"
+  else
+    ok "npm 依赖已存在，跳过 install"
+  fi
+  return 0
+}
+
+# 连通性测试（可选）；不因失败中止整个向导
+test_grok_search() {
+  local dest="$GROK_SEARCH_DIR"
+  info "连通性测试: node scripts/search.js --no-extra …"
+  local out ec=0
+  set +e
+  out="$(cd "$dest" && node scripts/search.js --no-extra "latest tech news" 2>/dev/null)"
+  ec=$?
+  set -e
+
+  if [[ "$ec" -ne 0 ]]; then
+    warn "搜索测试退出码 ${ec}（配置仍已写入，可稍后排查）"
+    if [[ -n "$out" ]]; then
+      printf '%s\n' "${DIM}$(printf '%s' "$out" | head -c 400)${RESET}" >&2
+    fi
+    return 1
+  fi
+  if printf '%s' "$out" | grep -q '"error"'; then
+    warn "搜索返回 error 字段，请检查协议 / 模型 / 密钥"
+    printf '%s\n' "${DIM}$(printf '%s' "$out" | head -c 400)${RESET}" >&2
+    return 1
+  fi
+  if ! printf '%s' "$out" | grep -q '"text"'; then
+    warn "未看到 answer.text，结果可能异常"
+    return 1
+  fi
+  ok "连通性测试通过"
+  return 0
+}
+
+# 可选：安装并配置 grok-search skill
+# 参数: base_url api_key enable_native_search(0|1)
+maybe_install_grok_search() {
+  local base_url="$1"
+  local api_key="$2"
+  local enable_native_search="${3:-0}"
+
+  if [[ "$SKIP_GROK_SEARCH" == "1" ]]; then
+    info "已设置 SKIP_GROK_SEARCH=1，跳过 grok-search skill。"
+    return 0
+  fi
+
+  printf '\n'
+  info "grok-search skill（可选）"
+  printf '  %s\n' "${DIM}独立脚本：search / fetch / map（Node.js）${RESET}"
+  printf '  %s\n' "${DIM}安装到: ${GROK_SEARCH_DIR}${RESET}"
+  printf '  %s\n' "${DIM}配置到: ${GROK_SEARCH_CONFIG}${RESET}"
+  printf '  %s\n' "${DIM}上游: https://github.com/Autsunset/grok-search${RESET}"
+  if [[ "$enable_native_search" -eq 1 ]]; then
+    printf '  %s\n' "${YELLOW}!${RESET}  ${DIM}已开启原生 Search Tool；skill 仍可用于 fetch/map 与多源搜索${RESET}"
+    printf '  %s\n' "${DIM}避免同一问题既 web_search 又跑 search.js（重复联网）${RESET}"
+  else
+    printf '  %s\n' "${DIM}未开原生 Search 时，推荐安装 skill 作为联网通道${RESET}"
+  fi
+  printf '\n'
+
+  local want=0
+  if [[ "$enable_native_search" -eq 1 ]]; then
+    if confirm "是否安装 grok-search skill?"; then
+      want=1
+    fi
+  else
+    if confirm_default_yes "是否安装 grok-search skill?（推荐）"; then
+      want=1
+    fi
+  fi
+
+  if [[ "$want" -ne 1 ]]; then
+    ok "grok-search: ${DIM}跳过${RESET}"
+    info "稍后可手动: git clone ${GROK_SEARCH_REPO} ${GROK_SEARCH_DIR}"
+    return 0
+  fi
+
+  # 环境检查
+  if ! command -v git >/dev/null 2>&1; then
+    err "需要 git 才能克隆 skill，已跳过 grok-search。"
+    return 0
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    err "未检测到 Node.js。grok-search 需要 Node >= ${GROK_SEARCH_MIN_NODE_MAJOR}.${GROK_SEARCH_MIN_NODE_MINOR}"
+    err "请安装 Node 后手动安装 skill，或重跑本向导。"
+    return 0
+  fi
+  if ! node_version_ok; then
+    err "Node 版本过低: $(node -v 2>/dev/null || echo '?')（需要 >= ${GROK_SEARCH_MIN_NODE_MAJOR}.${GROK_SEARCH_MIN_NODE_MINOR}）"
+    return 0
+  fi
+  ok "Node: ${DIM}$(node -v)${RESET}"
+  if ! command -v npm >/dev/null 2>&1; then
+    err "未检测到 npm，无法安装 undici 依赖。已跳过。"
+    return 0
+  fi
+
+  if ! install_grok_search_repo; then
+    warn "skill 仓库安装失败，已跳过配置写入。"
+    return 0
+  fi
+
+  # 协议
+  printf '\n'
+  info "选择搜索协议（searchEndpoint）"
+  printf '  %s\n' "${DIM}1) chat      — 推荐 grok2api / NewAPI；模型如 grok-4.3-fast${RESET}"
+  printf '  %s\n' "${DIM}2) responses — CPA / 官方 xAI 风格；常见 grok-4.5${RESET}"
+  local endpoint_choice default_endpoint default_model
+  if [[ "$enable_native_search" -eq 1 ]]; then
+    default_endpoint="responses"
+    default_model="grok-4.5"
+  else
+    default_endpoint="chat"
+    default_model="grok-4.3-fast"
+  fi
+  endpoint_choice="$(read_with_default "协议 [chat/responses]: " "$default_endpoint")"
+  endpoint_choice="$(printf '%s' "$endpoint_choice" | tr '[:upper:]' '[:lower:]')"
+  case "$endpoint_choice" in
+    chat|responses) ;;
+    *)
+      warn "无效协议，改用默认: ${default_endpoint}"
+      endpoint_choice="$default_endpoint"
+      ;;
+  esac
+  if [[ "$endpoint_choice" == "chat" ]]; then
+    default_model="grok-4.3-fast"
+  else
+    default_model="grok-4.5"
+  fi
+  ok "searchEndpoint: ${BOLD}${endpoint_choice}${RESET}"
+
+  # 模型
+  local search_model
+  search_model="$(read_with_default "搜索模型 ID: " "$default_model")"
+  if [[ -z "$search_model" ]]; then
+    search_model="$default_model"
+  fi
+  ok "model: ${DIM}${search_model}${RESET}"
+
+  # 是否复用本次 base_url / api_key
+  printf '\n'
+  info "将写入 grok-search 配置（可复用本次 GrokBuild 的 base_url / api_key）"
+  printf '  apiUrl:  %s\n' "${DIM}${base_url}${RESET}"
+  printf '  apiKey:  %s\n' "${DIM}$(mask_key_short "$api_key")${RESET}"
+  printf '  协议:    %s\n' "${DIM}${endpoint_choice}${RESET}"
+  printf '  模型:    %s\n' "${DIM}${search_model}${RESET}"
+  printf '  路径:    %s\n' "${DIM}${GROK_SEARCH_CONFIG}${RESET}"
+  printf '\n'
+
+  local use_same=1
+  if ! confirm_default_yes "使用上述 base_url / api_key 写入 grok-search?"; then
+    use_same=0
+  fi
+
+  local gs_url="$base_url" gs_key="$api_key"
+  if [[ "$use_same" -ne 1 ]]; then
+    while true; do
+      gs_url="$(require_nonempty "grok-search apiUrl (base，勿带 /chat/completions): " plain)"
+      if validate_base_url "$gs_url"; then
+        break
+      fi
+      warn "格式无效，需以 http:// 或 https:// 开头。"
+    done
+    gs_key="$(require_nonempty "grok-search apiKey: " plain)"
+  fi
+
+  if [[ -f "$GROK_SEARCH_CONFIG" ]]; then
+    warn "已有配置: ${GROK_SEARCH_CONFIG}（将被覆盖；未做自动备份）"
+    if ! confirm "确认覆盖 grok-search 配置?"; then
+      warn "已跳过写入 config.json；skill 代码仍保留在 ${GROK_SEARCH_DIR}"
+      return 0
+    fi
+  fi
+
+  write_grok_search_config "$gs_url" "$gs_key" "$endpoint_choice" "$search_model"
+  ok "已写入 ${BOLD}${GROK_SEARCH_CONFIG}${RESET}"
+  ok "apiProvider: ${DIM}$(infer_api_provider "$gs_url")${RESET}  key: ${DIM}$(mask_key_short "$gs_key")${RESET}"
+
+  printf '\n'
+  if confirm "是否现在测试搜索连通性?（--no-extra，需联网）"; then
+    test_grok_search || true
+  else
+    info "跳过测试。稍后可执行:"
+    printf '  %s\n' "${DIM}node \"${GROK_SEARCH_DIR}/scripts/search.js\" --no-extra \"随便搜个新闻\"${RESET}" >&2
+  fi
+
+  printf '\n'
+  ok "grok-search skill 就绪。"
+  info "Grok 会从 ~/.grok/skills/ 自动发现；也可 /grok-search 或让模型在需要联网时调用。"
+  info "示例: node \"${GROK_SEARCH_DIR}/scripts/fetch.js\" https://example.com"
+  printf '\n'
+}
+
 # ---------- 主流程 ----------
 main() {
   printf '\n'
   printf '%s\n' "${BOLD}Grok Build 配置安装向导${RESET}"
   printf '%s\n' "${DIM}将模板配置安装到 ~/.grok/config.toml${RESET}"
-  printf '%s\n' "${DIM}可自定义：模型别名 / base_url / api_key / Search Tool${RESET}"
+  printf '%s\n' "${DIM}可自定义：模型别名 / base_url / api_key / Search Tool / grok-search${RESET}"
   printf '\n'
 
   # 1. 检查源文件
@@ -553,6 +919,10 @@ main() {
     ok "Search Tool 已开启。重启 grok 或新开 session 后生效。"
     info "试用: 请 web_search 最新 xAI 新闻并给来源"
   fi
+
+  # 12. 可选：grok-search skill（在 config.toml 成功写入之后）
+  maybe_install_grok_search "$custom_url" "$custom_key" "$enable_search"
+
   ok "完成。可运行 grok 验证配置是否生效。"
   printf '\n'
 }

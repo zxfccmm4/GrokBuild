@@ -26,6 +26,7 @@
 - [安装脚本做了什么](#安装脚本做了什么)
 - [配置说明](#配置说明)
 - [常见自定义](#常见自定义)
+- [可选：grok-search skill](#可选grok-search-skill)
 - [故障排查](#故障排查)
 - [安全建议](#安全建议)
 - [许可证与免责](#许可证与免责)
@@ -55,6 +56,7 @@ curl -fsSL https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/bootstrap.s
 | 3 | **api_key** | 输入时可见，便于核对；可选二次确认 |
 | 4 | **Search Tool** | 可选；开启后启用原生 `web_search` / `x_search`（见下文） |
 | 5 | **确认** | 已有配置会先备份为 `config.toml.bak.<时间戳>` |
+| 6 | **grok-search skill** | 可选；安装 [Autsunset/grok-search](https://github.com/Autsunset/grok-search)（search / fetch / map） |
 
 ### 可选环境变量
 
@@ -62,7 +64,10 @@ curl -fsSL https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/bootstrap.s
 |------|------|
 | `SKIP_GROK_CLI=1` | 跳过 CLI，只下载并跑配置 |
 | `SKIP_CONFIG=1` | 只装 CLI，不跑配置向导 |
+| `SKIP_GROK_SEARCH=1` | 跳过 grok-search skill 安装步骤 |
 | `GROKBUILD_WORKDIR=/path` | 把脚本下载到指定目录（不自动删除） |
+| `GROK_SEARCH_REPO` | grok-search 的 git URL（默认 Autsunset 仓库） |
+| `GROK_SEARCH_DIR` | skill 安装目录（默认 `~/.grok/skills/grok-search`） |
 
 ```bash
 # 已装好 grok，只配置
@@ -70,6 +75,9 @@ SKIP_GROK_CLI=1 curl -fsSL https://raw.githubusercontent.com/zxfccmm4/GrokBuild/
 
 # 只装 CLI
 SKIP_CONFIG=1 curl -fsSL https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/bootstrap.sh | bash
+
+# 配置时不装 grok-search skill
+SKIP_GROK_SEARCH=1 SKIP_GROK_CLI=1 curl -fsSL https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/bootstrap.sh | bash
 ```
 
 ### 前置条件
@@ -108,7 +116,7 @@ GrokBuild/
 |------|------|
 | [`bootstrap.sh`](./bootstrap.sh) | 一条命令串联安装与配置 |
 | [`config.toml`](./config.toml) | 写入目标的模板（敏感字段安装时由你填写） |
-| [`install-config.sh`](./install-config.sh) | 脱敏预览 → 别名 / URL / Key → 备份 → 写入 |
+| [`install-config.sh`](./install-config.sh) | 脱敏预览 → 别名 / URL / Key → Search Tool → 可选 grok-search skill → 备份 → 写入 |
 
 ---
 
@@ -210,6 +218,7 @@ cp ~/.grok/config.toml.bak.<时间戳> ~/.grok/config.toml
 | Search Tool | **可选**；开启则写入 `web_search` + Responses 后端搜索字段 |
 | 备份 | 覆盖前备份已有配置 |
 | 写入 | 模板 + 你的自定义项；权限尽量 `600` |
+| grok-search | **可选**；clone 到 `~/.grok/skills/grok-search`，写入 `~/.config/grok-search/config.json` |
 
 ---
 
@@ -421,6 +430,79 @@ supports_backend_search = true
 
 ---
 
+## 可选：grok-search skill
+
+[Autsunset/grok-search](https://github.com/Autsunset/grok-search) 是独立的 **Skill + Node 脚本**，提供：
+
+| 脚本 | 能力 |
+|------|------|
+| `search.js` | 经 Grok Chat / Responses 联网搜索，并可并行 Tavily / Firecrawl |
+| `fetch.js` | 抓取 URL 可读正文 |
+| `map.js` | 发现站点内候选页面 |
+
+与 **原生 Search Tool** 的关系：
+
+| | 原生 Search Tool | grok-search skill |
+|--|------------------|-------------------|
+| 配置 | `~/.grok/config.toml` | `~/.config/grok-search/config.json` |
+| 调用 | 模型后端 `web_search` / `x_search` | Agent 执行 `node scripts/*.js` |
+| 依赖 | 网关支持 Responses 搜索 | Node ≥ 18.17 + `npm install` |
+| 适合 | 网关已开原生联网 | 中转无原生搜索，或需要 fetch/map |
+
+**可并存**；未开原生 Search 时，向导默认 **推荐安装** skill（`[Y/n]`）。已开原生时仍可装 skill（`[y/N]`），但请避免同一问题重复联网。
+
+### 向导会做什么
+
+写入 `config.toml` 成功后询问：
+
+1. 是否安装 skill（可用 `SKIP_GROK_SEARCH=1` 跳过）
+2. 检查 `git` / Node ≥ 18.17 / `npm`
+3. `git clone`（或已有目录则 `git pull`）→ `~/.grok/skills/grok-search`
+4. `npm install`（若缺少 `undici`）
+5. 选择协议：`chat`（grok2api / NewAPI）或 `responses`（CPA / xAI 风格）
+6. 搜索模型 ID（默认 `grok-4.3-fast` 或 `grok-4.5`）
+7. 复用本次 `base_url` / `api_key` 写入 `config.json`（可改）
+8. 可选连通性测试：`search.js --no-extra`
+
+### 字段对照
+
+| GrokBuild | grok-search `config.json` |
+|-----------|---------------------------|
+| `base_url` | `apiUrl`（base，勿带 `/chat/completions`） |
+| `api_key` | `apiKey` |
+| Search Tool 开启 ≈ responses | `searchEndpoint`: `responses` |
+| 常见中转快模型联网 | `searchEndpoint`: `chat` |
+| `[model.*].model` | 独立字段 `model`（可与主对话模型不同） |
+
+### 手动安装 / 重装
+
+```bash
+# 仅重跑配置向导（含 grok-search 步骤）
+./install-config.sh
+
+# 跳过 skill
+SKIP_GROK_SEARCH=1 ./install-config.sh
+
+# 完全手动
+git clone https://github.com/Autsunset/grok-search.git ~/.grok/skills/grok-search
+cd ~/.grok/skills/grok-search && npm install
+mkdir -p ~/.config/grok-search
+# 编辑 ~/.config/grok-search/config.json（见上游 README）
+chmod 600 ~/.config/grok-search/config.json
+```
+
+### 试用
+
+```bash
+node ~/.grok/skills/grok-search/scripts/search.js --no-extra "随便搜个新闻"
+node ~/.grok/skills/grok-search/scripts/fetch.js https://example.com
+node ~/.grok/skills/grok-search/scripts/map.js https://example.com --limit 5
+```
+
+在 Grok 会话中，skill 位于 `~/.grok/skills/`，会被自动发现；也可在需要联网 / 读网页时让模型按 `SKILL.md` 调用脚本。
+
+---
+
 ## 故障排查
 
 | 现象 | 可能原因 | 处理 |
@@ -429,8 +511,10 @@ supports_backend_search = true
 | 模型别名一直格式无效 | 旧版脚本把提示混入输入 | 用最新 `install-config.sh`；合法例：`Steve`、`MyProxy`、`work-grok`，或回车用默认 |
 | `base_url` 格式无效 | 缺协议或含空格 | 使用 `https://host/v1` |
 | 连不上模型 | 地址 / 密钥 / 网络 | 查 `base_url`、`api_key`、服务商控制台 |
-| 开启 Search 后报错 / 无搜索 | 网关不支持 Responses 或原生搜索 | 关掉 Search Tool，或换支持 `web_search` 的网关；确认 `api_backend` / `supports_backend_search` |
-| 对话里不联网 | 旧 session / 未开 Search | 新开 session；检查 `web_search` 与 `supports_backend_search` |
+| 开启 Search 后报错 / 无搜索 | 网关不支持 Responses 或原生搜索 | 关掉 Search Tool，或换支持 `web_search` 的网关；确认 `api_backend` / `supports_backend_search`；或改用 **grok-search skill** |
+| 对话里不联网 | 旧 session / 未开 Search | 新开 session；检查 `web_search` 与 `supports_backend_search`；或安装 grok-search |
+| grok-search 跳过 / 失败 | 无 Node / 版本低 / 无 git / npm 失败 | 安装 Node ≥ 18.17 与 git；`cd ~/.grok/skills/grok-search && npm install` 后重跑向导 |
+| `search.js` 401 / 404 / 422 | key、协议或模型不匹配 | 核对 `~/.config/grok-search/config.json` 的 `searchEndpoint` 与 `model`（chat 用快模型，responses 常用 `grok-4.5`） |
 | 行为与预期不符 | 读了旧配置 | 确认 `~/.grok/config.toml`，必要时重启 `grok` |
 | 想撤销安装 | — | `cp ~/.grok/config.toml.bak.<时间戳> ~/.grok/config.toml` |
 
@@ -447,7 +531,7 @@ Grok 本体能力（TUI、Skills、MCP、Headless 等）：
 
 - **不要**把含真实 `api_key` 的配置提交到 Git，或发到聊天 / 截图
 - 模板里的示例值仅作结构参考；安装脚本会强制你重新填写
-- 保持 `~/.grok/config.toml` 权限为 `600`（仅本人可读）
+- 保持 `~/.grok/config.toml` 与 `~/.config/grok-search/config.json` 权限为 `600`（仅本人可读）
 - 分享仓库前确认 `config.toml` 内没有可用密钥
 
 ---

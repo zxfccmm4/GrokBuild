@@ -9,6 +9,9 @@
 #   GROKBUILD_WORKDIR   下载脚本的工作目录（默认临时目录，结束后清理）
 #   SKIP_GROK_CLI=1     跳过 Grok CLI 安装（已装好时）
 #   SKIP_CONFIG=1       只装 CLI，不跑配置向导
+#   SKIP_GROK_SEARCH=1  跳过 grok-search skill（由 install-config.sh 读取）
+#   GROK_SEARCH_REPO    grok-search git URL（默认 Autsunset/grok-search）
+#   GROK_SEARCH_DIR     skill 安装目录（默认 ~/.grok/skills/grok-search）
 
 set -euo pipefail
 
@@ -16,6 +19,10 @@ REPO_RAW="${GROKBUILD_REPO_RAW:-https://raw.githubusercontent.com/zxfccmm4/GrokB
 GROK_CLI_INSTALL_URL="${GROK_CLI_INSTALL_URL:-https://x.ai/cli/install.sh}"
 SKIP_GROK_CLI="${SKIP_GROK_CLI:-0}"
 SKIP_CONFIG="${SKIP_CONFIG:-0}"
+# 透传给 install-config.sh（export 后子进程可见）
+export SKIP_GROK_SEARCH="${SKIP_GROK_SEARCH:-0}"
+export GROK_SEARCH_REPO="${GROK_SEARCH_REPO:-https://github.com/Autsunset/grok-search.git}"
+export GROK_SEARCH_DIR="${GROK_SEARCH_DIR:-${HOME}/.grok/skills/grok-search}"
 
 # ---------- 颜色 ----------
 if [[ -t 1 ]] || [[ -t 2 ]]; then
@@ -143,7 +150,7 @@ run_config_wizard() {
 main() {
   printf '\n' >&2
   printf '%s\n' "${BOLD}GrokBuild 一键安装${RESET}" >&2
-  printf '%s\n' "${DIM}1) 安装 Grok Build CLI  2) 下载配置脚本  3) 交互写入 ~/.grok/config.toml${RESET}" >&2
+  printf '%s\n' "${DIM}1) 安装 Grok Build CLI  2) 下载配置脚本  3) 交互写入 ~/.grok/config.toml  4) 可选 grok-search skill${RESET}" >&2
   printf '\n' >&2
 
   need_cmd curl
