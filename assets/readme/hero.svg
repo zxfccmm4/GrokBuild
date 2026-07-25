@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="380" viewBox="0 0 1200 380"
+     role="img" aria-labelledby="title desc">
+  <title id="title">GrokBuild — 用自己的网关跑 Grok Build</title>
+  <desc id="desc">把 Grok Build CLI 接到 OpenAI 兼容网关：装 CLI、填 base_url 与 api_key、写入 ~/.grok/config.toml，可选联网。</desc>
+
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#070B12"/>
+      <stop offset="55%" stop-color="#0B1220"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#151E2E"/>
+      <stop offset="100%" stop-color="#0E1522"/>
+    </linearGradient>
+    <linearGradient id="accentBar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#38BDF8"/>
+      <stop offset="100%" stop-color="#0EA5E9"/>
+    </linearGradient>
+    <pattern id="dots" width="20" height="20" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="0.9" fill="#334155" opacity="0.45"/>
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="380" rx="24" fill="url(#bg)"/>
+  <rect width="1200" height="380" rx="24" fill="url(#dots)" opacity="0.35"/>
+  <rect x="1" y="1" width="1198" height="378" rx="23" fill="none" stroke="#1E293B" stroke-width="1.5"/>
+  <rect x="0" y="48" width="5" height="120" rx="2" fill="url(#accentBar)"/>
+
+  <g id="title-block" transform="translate(56 48)">
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace">
+      <rect x="0" y="0" width="148" height="28" rx="8" fill="#0EA5E918" stroke="#0EA5E940" stroke-width="1"/>
+      <text x="14" y="19" fill="#7DD3FC" font-size="13" letter-spacing="1.2">CLI · CONFIG</text>
+    </g>
+
+    <text x="0" y="92"
+          font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif"
+          font-size="56" font-weight="700" fill="#F8FAFC" letter-spacing="-1.4">GrokBuild</text>
+
+    <text x="0" y="136"
+          font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif"
+          font-size="23" font-weight="500" fill="#E2E8F0">用自己的 OpenAI 兼容网关跑 Grok Build</text>
+
+    <text x="0" y="174"
+          font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif"
+          font-size="17" fill="#94A3B8">装 CLI · 交互写入 ~/.grok/config.toml · 可选联网</text>
+    <text x="0" y="200"
+          font-family="-apple-system, BlinkMacSystemFont, Segoe UI, PingFang SC, sans-serif"
+          font-size="17" fill="#64748B">原生 Search Tool 或 grok-search skill，按网关能力二选一或并存</text>
+
+    <g transform="translate(0 246)" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="14">
+      <rect x="0" y="0" width="112" height="32" rx="10" fill="#111827" stroke="#334155" stroke-width="1"/>
+      <circle cx="16" cy="16" r="3.5" fill="#34D399"/>
+      <text x="28" y="21" fill="#CBD5E1">macOS</text>
+
+      <rect x="122" y="0" width="96" height="32" rx="10" fill="#111827" stroke="#334155" stroke-width="1"/>
+      <circle cx="138" cy="16" r="3.5" fill="#34D399"/>
+      <text x="150" y="21" fill="#CBD5E1">Linux</text>
+
+      <rect x="228" y="0" width="156" height="32" rx="10" fill="#111827" stroke="#0EA5E955" stroke-width="1"/>
+      <text x="244" y="21" fill="#7DD3FC">curl | bash</text>
+    </g>
+  </g>
+
+  <g id="project-proof" transform="translate(640 40)">
+    <rect x="0" y="0" width="508" height="300" rx="16" fill="url(#panel)" stroke="#1E293B" stroke-width="1.5"/>
+
+    <rect x="0" y="0" width="508" height="40" rx="16" fill="#121A28"/>
+    <rect x="0" y="22" width="508" height="18" fill="#121A28"/>
+    <circle cx="24" cy="20" r="5" fill="#F87171"/>
+    <circle cx="44" cy="20" r="5" fill="#FBBF24"/>
+    <circle cx="64" cy="20" r="5" fill="#34D399"/>
+    <text x="254" y="24" text-anchor="middle"
+          font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+          font-size="13" fill="#64748B">install-config.sh</text>
+
+    <g font-family="ui-monospace, SFMono-Regular, Menlo, monospace" font-size="15">
+      <text x="24" y="72" fill="#475569"># bootstrap → wizard</text>
+
+      <text x="24" y="104" fill="#38BDF8">›</text>
+      <text x="42" y="104" fill="#E2E8F0">model alias</text>
+      <text x="360" y="104" fill="#94A3B8">Steve</text>
+
+      <text x="24" y="136" fill="#38BDF8">›</text>
+      <text x="42" y="136" fill="#E2E8F0">base_url</text>
+      <text x="250" y="136" fill="#7DD3FC">https://…/v1</text>
+
+      <text x="24" y="168" fill="#38BDF8">›</text>
+      <text x="42" y="168" fill="#E2E8F0">api_key</text>
+      <text x="250" y="168" fill="#FBBF24">••••••••</text>
+
+      <text x="24" y="200" fill="#38BDF8">›</text>
+      <text x="42" y="200" fill="#E2E8F0">Search Tool</text>
+      <text x="360" y="200" fill="#64748B">off</text>
+
+      <rect x="20" y="228" width="468" height="48" rx="10" fill="#070B12" stroke="#14532D" stroke-width="1"/>
+      <text x="36" y="258" fill="#34D399">✓ wrote ~/.grok/config.toml</text>
+      <text x="360" y="258" fill="#64748B">mode 600</text>
+    </g>
+  </g>
+</svg>

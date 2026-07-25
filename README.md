@@ -1,27 +1,21 @@
 # GrokBuild
 
 <p align="center">
-  <strong>Grok Build 配置模板</strong><br/>
-  <sub>一键安装 · 交互向导 · 可选联网</sub>
+  <img src="./assets/readme/hero.svg" width="100%" alt="GrokBuild — 用自己的 OpenAI 兼容网关跑 Grok Build；装 CLI、交互写入配置、可选联网">
 </p>
 
 <p align="center">
-  把 <a href="https://x.ai">Grok CLI</a> 接到你自己的 OpenAI 兼容网关<br/>
-  装 CLI → 填 <code>base_url</code> / <code>api_key</code> → 写入 <code>~/.grok/config.toml</code>
+  <a href="#install"><img src="https://img.shields.io/badge/install-one%20command-0ea5e9?style=flat-square" alt="one-command install" /></a>
+  &nbsp;
+  <a href="https://github.com/zxfccmm4/GrokBuild"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-111827?style=flat-square" alt="macOS and Linux" /></a>
+  &nbsp;
+  <a href="#search"><img src="https://img.shields.io/badge/search-native%20%2B%20skill-0ea5e9?style=flat-square" alt="native search and skill" /></a>
+  &nbsp;
+  <a href="#security"><img src="https://img.shields.io/badge/api__key-you%20fill%20in-f59e0b?style=flat-square" alt="api key filled by you" /></a>
 </p>
 
 <p align="center">
-  <a href="#quick-start"><img src="https://img.shields.io/badge/install-one%20command-0ea5e9?style=flat-square" alt="install" /></a>
-  &nbsp;
-  <a href="https://github.com/zxfccmm4/GrokBuild"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-111827?style=flat-square" alt="platform" /></a>
-  &nbsp;
-  <a href="#search"><img src="https://img.shields.io/badge/search-native%20%2B%20skill-6366f1?style=flat-square" alt="search" /></a>
-  &nbsp;
-  <a href="#security"><img src="https://img.shields.io/badge/api__key-you%20fill%20in-f59e0b?style=flat-square" alt="security" /></a>
-</p>
-
-<p align="center">
-  <a href="#quick-start">安装</a>
+  <a href="#install">安装</a>
   ·
   <a href="#verify">验证</a>
   ·
@@ -34,9 +28,15 @@
   <a href="#security">安全</a>
 </p>
 
+**GrokBuild** 帮你把 [Grok Build CLI](https://x.ai) 接到自己的 OpenAI 兼容网关：一条命令装 CLI，交互填写 `base_url` / `api_key`，写入 `~/.grok/config.toml`。需要联网时，可开原生 Search，或装 [grok-search](https://github.com/Autsunset/grok-search) skill。
+
 ---
 
-<a id="quick-start"></a>
+<a id="install"></a>
+
+<p align="center">
+  <img src="./assets/readme/section-install.svg" width="100%" alt="01 安装 — 一键安装：curl | bash，向导写入配置">
+</p>
 
 ## 一键安装
 
@@ -44,7 +44,9 @@
 curl -fsSL https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/bootstrap.sh | bash
 ```
 
-一条命令完成：**装 CLI → 拉模板 → 交互写入配置 → 可选 skill**。
+<p align="center">
+  <img src="./assets/readme/workflow.svg" width="100%" alt="安装流水线：装 CLI → 拉模板 → 写配置 → 可选 grok-search skill">
+</p>
 
 | 步骤 | 做什么 |
 |:----:|--------|
@@ -53,7 +55,7 @@ curl -fsSL https://raw.githubusercontent.com/zxfccmm4/GrokBuild/main/bootstrap.s
 | **3** | 交互写入 `~/.grok/config.toml` |
 | **4** | 可选安装 [grok-search](https://github.com/Autsunset/grok-search) skill |
 
-### 向导问答
+### 向导会问什么
 
 | # | 项 | 说明 |
 |:-:|----|------|
@@ -109,6 +111,10 @@ SKIP_GROK_SEARCH=1 SKIP_GROK_CLI=1 curl -fsSL https://raw.githubusercontent.com/
 
 <a id="verify"></a>
 
+<p align="center">
+  <img src="./assets/readme/section-verify.svg" width="100%" alt="02 验证 — 安装后验证：grok --version，检查 config">
+</p>
+
 ## 安装后验证
 
 ```bash
@@ -126,6 +132,10 @@ cat ~/.grok/config.toml
 
 ---
 
+<p align="center">
+  <img src="./assets/readme/section-structure.svg" width="100%" alt="03 仓库 — 项目结构：bootstrap、config、install-config">
+</p>
+
 ## 项目结构
 
 ```text
@@ -133,6 +143,7 @@ GrokBuild/
 ├── bootstrap.sh         # 一键：装 CLI + 下载 + 配置向导
 ├── config.toml          # 配置模板（隐私 / UI / 模型段）
 ├── install-config.sh    # 交互写入 ~/.grok/config.toml（+ 可选 skill）
+├── assets/readme/       # README 视觉资源
 └── README.md
 ```
 
@@ -221,6 +232,10 @@ cp ~/.grok/config.toml.bak.<时间戳> ~/.grok/config.toml
 
 <a id="config"></a>
 
+<p align="center">
+  <img src="./assets/readme/section-config.svg" width="100%" alt="04 配置 — 配置说明：~/.grok/config.toml 字段与默认值">
+</p>
+
 ## 配置说明
 
 Grok 读取：
@@ -230,7 +245,7 @@ Grok 读取：
 ```
 
 模板默认：自定义模型别名 · 关闭遥测 · 限制代码库上传 · 偏宽松权限。  
-`base_url` / `api_key` 正确即可走兼容接口。
+只要 `base_url` / `api_key` 正确，即可走兼容接口。
 
 <details open>
 <summary><strong>结构示例（脱敏）</strong></summary>
@@ -334,9 +349,7 @@ permission_mode = "always-approve"
 
 </details>
 
----
-
-## 常见自定义
+### 常见自定义
 
 <table>
 <tr>
@@ -400,9 +413,17 @@ reasoning_efforts = ["low", "medium", "high"]
 
 <a id="search"></a>
 
+<p align="center">
+  <img src="./assets/readme/section-search.svg" width="100%" alt="05 联网 — 联网能力：原生 Search 与 grok-search skill">
+</p>
+
 ## 联网能力
 
-两条路径，可并存，职责不同。同一问题不要既 `web_search` 又跑 `search.js`。
+两条路径可并存，但职责不同：**同一问题不要既 `web_search` 又跑 `search.js`。**
+
+<p align="center">
+  <img src="./assets/readme/search-paths.svg" width="100%" alt="原生 Search Tool 走网关 Responses；grok-search skill 走本地 Node 脚本">
+</p>
 
 | | 原生 Search Tool | grok-search skill |
 |--|:----------------:|:-----------------:|
@@ -411,15 +432,6 @@ reasoning_efforts = ["low", "medium", "high"]
 | **依赖** | 网关支持 Responses 搜索 | Node ≥ 18.17 + `npm install` |
 | **适合** | 网关已开原生联网 | 中转无原生搜索，或需要 fetch / map |
 | **向导默认** | 关闭 `[y/N]` | 未开原生时推荐 `[Y/n]` |
-
-```text
-会话
- ├── 原生 Search Tool ──► 网关 Responses / web_search / x_search
- │                        └── ~/.grok/config.toml
- │
- └── grok-search skill ──► node scripts/{search,fetch,map}.js
-                           └── ~/.config/grok-search/config.json
-```
 
 ### 原生 Search Tool
 
@@ -528,6 +540,10 @@ Skill 装在 `~/.grok/skills/`，Grok 会自动发现。
 
 <a id="troubleshoot"></a>
 
+<p align="center">
+  <img src="./assets/readme/section-troubleshoot.svg" width="100%" alt="06 排错 — 故障排查：常见报错与回滚">
+</p>
+
 ## 故障排查
 
 | 现象 | 处理 |
@@ -553,6 +569,10 @@ Grok 本体文档：
 ---
 
 <a id="security"></a>
+
+<p align="center">
+  <img src="./assets/readme/section-security.svg" width="100%" alt="07 安全 — 安全建议：密钥本地填写，权限 600">
+</p>
 
 ## 安全建议
 
@@ -581,6 +601,6 @@ Grok 本体文档：
     ·
     <a href="https://github.com/Autsunset/grok-search">grok-search</a>
     ·
-    <a href="#quick-start">一键安装</a>
+    <a href="#install">一键安装</a>
   </sub>
 </p>
