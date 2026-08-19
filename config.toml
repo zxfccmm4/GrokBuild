@@ -9,9 +9,9 @@ default_reasoning_effort = "high"
 # web_search = "Steve"
 
 [model.Steve]
-model = "grok-4.5"
+model = "grok-4.6"
 base_url = "https://YOUR_API_BASE_URL/v1"
-name = "grok-4.5"
+name = "grok-4.6"
 api_key = "YOUR_API_KEY"
 context_window = 500000
 supports_reasoning_effort = true

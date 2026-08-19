@@ -672,11 +672,11 @@ maybe_install_grok_search() {
   printf '\n'
   info "选择搜索协议（searchEndpoint）"
   printf '  %s\n' "${DIM}1) chat      — 推荐 grok2api / NewAPI；模型如 grok-4.3-fast${RESET}"
-  printf '  %s\n' "${DIM}2) responses — CPA / 官方 xAI 风格；常见 grok-4.5${RESET}"
+  printf '  %s\n' "${DIM}2) responses — CPA / 官方 xAI 风格；常见 grok-4.6${RESET}"
   local endpoint_choice default_endpoint default_model
   if [[ "$enable_native_search" -eq 1 ]]; then
     default_endpoint="responses"
-    default_model="grok-4.5"
+    default_model="grok-4.6"
   else
     default_endpoint="chat"
     default_model="grok-4.3-fast"
@@ -693,7 +693,7 @@ maybe_install_grok_search() {
   if [[ "$endpoint_choice" == "chat" ]]; then
     default_model="grok-4.3-fast"
   else
-    default_model="grok-4.5"
+    default_model="grok-4.6"
   fi
   ok "searchEndpoint: ${BOLD}${endpoint_choice}${RESET}"
 
