@@ -7,6 +7,8 @@
 <p align="center">
   <a href="#install"><img src="https://img.shields.io/badge/install-one%20command-0ea5e9?style=flat-square" alt="one-command install" /></a>
   &nbsp;
+  <a href="#config"><img src="https://img.shields.io/badge/default%20model-grok--4.7-8b5cf6?style=flat-square" alt="default model grok-4.7" /></a>
+  &nbsp;
   <a href="https://github.com/zxfccmm4/GrokBuild"><img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-111827?style=flat-square" alt="macOS and Linux" /></a>
   &nbsp;
   <a href="#search"><img src="https://img.shields.io/badge/search-native%20%2B%20skill-0ea5e9?style=flat-square" alt="native search and skill" /></a>
@@ -29,6 +31,8 @@
 </p>
 
 **GrokBuild** 帮你把 [Grok Build CLI](https://x.ai) 接到自己的 OpenAI 兼容网关：一条命令装 CLI，交互填写 `base_url` / `api_key`，写入 `~/.grok/config.toml`。需要联网时，可开原生 Search，或装 [grok-search](https://github.com/Autsunset/grok-search) skill。
+
+> 当前主对话与 Responses 搜索的默认上游模型为 **`grok-4.7`**；Chat 搜索仍默认使用 **`grok-4.3-fast`**。
 
 ---
 
@@ -262,9 +266,9 @@ default_reasoning_effort = "high"
 # web_search = "Steve"        # 开启 Search Tool 时由向导写入
 
 [model.Steve]
-model = "grok-4.6"            # 上游真实模型 ID
+model = "grok-4.7"            # 上游真实模型 ID
 base_url = "***REDACTED***"   # 安装时填写
-name = "grok-4.6"
+name = "grok-4.7"
 api_key = "***REDACTED***"    # 安装时填写
 context_window = 500000
 supports_reasoning_effort = true
@@ -309,7 +313,7 @@ permission_mode = "always-approve"
 
 | 键 | 必填 | 说明 |
 |----|:----:|------|
-| `model` | | 上游模型 ID，如 `grok-4.6` |
+| `model` | | 上游模型 ID，如 `grok-4.7` |
 | `base_url` | **是** | OpenAI 兼容根地址，如 `https://api.example.com/v1` |
 | `api_key` | **是** | 访问密钥，切勿泄露 |
 | `name` | | 展示名 |
@@ -395,9 +399,9 @@ default_reasoning_effort = "medium"  # 或 "low"
 default = "MyProxy"
 
 [model.MyProxy]
-model = "grok-4.6"           # 发给 API 的真实 ID
+model = "grok-4.7"           # 发给 API 的真实 ID
 base_url = "https://你的网关/v1"
-name = "grok-4.6"
+name = "grok-4.7"
 api_key = "你的密钥"
 context_window = 500000
 supports_reasoning_effort = true
@@ -407,7 +411,7 @@ reasoning_efforts = ["low", "medium", "high"]
 | 字段 | 含义 | 示例 |
 |------|------|------|
 | `default` / `[model.XXX]` | 本地配置名 | `Steve`、`MyProxy` |
-| `model` | API 模型 ID | `grok-4.6` |
+| `model` | API 模型 ID | `grok-4.7` |
 
 ---
 
@@ -497,7 +501,7 @@ supports_backend_search = true
 3. `git clone` 或 `git pull` → `~/.grok/skills/grok-search`
 4. `npm install`（缺 `undici` 时）
 5. 选协议：`chat`（中转）或 `responses`（CPA / xAI 风格）
-6. 搜索模型 ID（默认 `grok-4.3-fast` 或 `grok-4.6`）
+6. 搜索模型 ID（默认 `grok-4.3-fast` 或 `grok-4.7`）
 7. 复用本次 `base_url` / `api_key` 写 `config.json`
 8. 可选连通性测试：`search.js --no-extra`
 
@@ -555,7 +559,7 @@ Skill 装在 `~/.grok/skills/`，Grok 会自动发现。
 | Search 报错 / 无搜索 | 关掉 Search Tool，换支持网关，或改用 **grok-search** |
 | 对话里不联网 | 新开 session；检查 `web_search` / skill 是否装好 |
 | grok-search 安装失败 | 装 Node ≥ 18.17 与 git；`cd ~/.grok/skills/grok-search && npm install` |
-| `search.js` 401 / 404 / 422 | 核对 `searchEndpoint` 与 `model`（chat 用快模型，responses 常用 `grok-4.6`） |
+| `search.js` 401 / 404 / 422 | 核对 `searchEndpoint` 与 `model`（chat 用快模型，responses 常用 `grok-4.7`） |
 | 行为与预期不符 | 确认 `~/.grok/config.toml`，重启 `grok` |
 | 想撤销 | `cp ~/.grok/config.toml.bak.<时间戳> ~/.grok/config.toml` |
 
